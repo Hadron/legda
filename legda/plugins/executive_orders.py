@@ -12,6 +12,7 @@ from legda.plugins.base import RetrievalPlugin
 class ExecutiveOrderRetriever(RetrievalPlugin):
     """Retrieve executive orders from the Federal Register API."""
 
+    document_type = "executive_orders"
     api_base_url = "https://www.federalregister.gov/api/v1/documents.json"
     default_per_page = 100
     timeout_seconds = 30.0

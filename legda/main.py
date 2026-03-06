@@ -8,28 +8,19 @@ from legda.models import Document
 from legda.plugins.executive_orders import ExecutiveOrderRetriever
 
 
-OUTPUT_DIR = Path("data/executive_orders")
+DATA_DIR = Path("data")
 SINCE = datetime(2026, 2, 19, tzinfo=timezone.utc)
-
-
-def _filename_for(document: Document) -> str:
-    extension = "pdf" if document.pdf_url else "html"
-    return f"{document.publication_date.isoformat()}_{document.document_number}.{extension}"
 
 
 async def _download_document(
     retriever: ExecutiveOrderRetriever, document: Document, semaphore: asyncio.Semaphore
 ) -> Path:
     async with semaphore:
-        payload = await retriever.get_document(document)
-        output_path = OUTPUT_DIR / _filename_for(document)
-        output_path.write_bytes(payload)
-        return output_path
+        return await retriever.download_document(document)
 
 
 async def run() -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    retriever = ExecutiveOrderRetriever()
+    retriever = ExecutiveOrderRetriever(data_directory=DATA_DIR)
 
     documents = await retriever.documents_since(SINCE)
     if not documents:
@@ -47,7 +38,8 @@ async def run() -> None:
 
     print(
         f"Downloaded {len(downloaded_paths)} executive orders published since "
-        f"{SINCE.date().isoformat()} to {OUTPUT_DIR.resolve()}"
+        f"{SINCE.date().isoformat()} to "
+        f"{(retriever.data_directory / retriever.document_type).resolve()}"
     )
     for path in downloaded_paths:
         print(f"- {path}")
@@ -55,4 +47,3 @@ async def run() -> None:
 
 if __name__ == "__main__":
     asyncio.run(run())
-
