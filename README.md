@@ -13,8 +13,8 @@
 ## Run
 
 ```bash
+python3 -m pip install -r requirements.txt
 python3 -m legda
 ```
 
 This fetches and downloads all executive orders published on or after `2026-02-19` into `data/executive_orders/`.
-
