@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import (
+    date,
+    datetime,
+)
 from enum import Enum
 
 from sqlalchemy import (
+    DateTime,
     Enum as SqlEnum,
     ForeignKeyConstraint,
     String,
@@ -81,3 +85,12 @@ class DocumentInstance(Base):
     )
 
     document: Mapped[Document] = relationship(back_populates="instances")
+
+
+class FetchDate(Base):
+    """Most recent successful discovery timestamp for each plugin."""
+
+    __tablename__ = "fetch_dates"
+
+    plugin: Mapped[str] = mapped_column(String(128), primary_key=True)
+    date_fetched: Mapped[datetime] = mapped_column(DateTime(timezone=True))

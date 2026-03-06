@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 
 from legda.db import (
@@ -15,7 +14,6 @@ from legda.plugins import build_plugins
 
 
 DATA_DIR = Path("data")
-SINCE = datetime(2026, 2, 19, tzinfo=timezone.utc)
 
 
 async def run() -> None:
@@ -28,12 +26,12 @@ async def run() -> None:
     discovery_driver = DiscoveryDriver(session_factory=session_factory, plugins=plugins)
     download_driver = DownloadDriver(session_factory=session_factory, plugins=plugins)
 
-    discovery_counts = await discovery_driver.run(SINCE)
+    discovery_counts = await discovery_driver.run()
     download_counts = await download_driver.run()
 
     await engine.dispose()
 
-    print(f"Discovery complete since {SINCE.date().isoformat()}:")
+    print("Discovery complete:")
     for plugin_key, count in discovery_counts.items():
         print(f"- {plugin_key}: upserted {count} documents")
 

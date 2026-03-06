@@ -12,6 +12,7 @@
 - `ExecutiveOrderRetriever` (`legda/plugins/executive_orders.py`) implements this contract using the Federal Register API.
 - `DiscoveryDriver` (`legda/drivers/discovery.py`) runs all plugins and upserts discovered documents.
 - `DownloadDriver` (`legda/drivers/download.py`) fetches documents with `status=to_fetch`.
+- `FetchDate` (`legda/models.py`) stores per-plugin successful discovery timestamps.
 - Plugin registration lives in `legda/plugins/__init__.py` via a plugin-key to class map.
 
 ## Run
@@ -21,6 +22,9 @@ python3 -m pip install -r requirements.txt
 python3 -m legda
 ```
 
-This fetches and downloads all executive orders published on or after `2026-02-19` into:
+This fetches and downloads executive orders into:
 
 - `data/<document_type>/<publication_date>-<document_id>.<extension>`
+
+Discovery uses the last successful plugin fetch timestamp from `fetch_dates`; new
+plugins start from `DEFAULT_DISCOVERY_SINCE` in `legda/constants.py`.
