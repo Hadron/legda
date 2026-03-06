@@ -9,7 +9,9 @@
   - `get_documents(datetime) -> list[Document]`
   - `get_document(Document, DocumentInstance) -> bytes`
   - `download_document(Document) -> list[DocumentInstance]`
-- `ExecutiveOrderRetriever` (`legda/plugins/executive_orders.py`) implements this contract using the Federal Register API.
+- `FederalRegisterRetriever` (`legda/plugins/federal_register.py`) provides shared Federal Register retrieval logic.
+- `ExecutiveOrderRetriever` (`legda/plugins/executive_orders.py`) uses that base for executive orders.
+- `OpmFederalRegisterRetriever` (`legda/plugins/opm_federal_register.py`) uses that base for OPM actions.
 - `DiscoveryDriver` (`legda/drivers/discovery.py`) runs all plugins and upserts discovered documents.
 - `DownloadDriver` (`legda/drivers/download.py`) fetches documents with `status=to_fetch`.
 - `FetchDate` (`legda/models.py`) stores per-plugin successful discovery timestamps.
