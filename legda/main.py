@@ -1,49 +1,39 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 
-from legda.models import Document
-from legda.plugins.executive_orders import ExecutiveOrderRetriever
+from legda.db import create_session_factory
+from legda.db import initialize_database
+from legda.drivers import DiscoveryDriver
+from legda.drivers import DownloadDriver
+from legda.plugins import build_plugins
 
 
 DATA_DIR = Path("data")
 SINCE = datetime(2026, 2, 19, tzinfo=timezone.utc)
 
 
-async def _download_document(
-    retriever: ExecutiveOrderRetriever, document: Document, semaphore: asyncio.Semaphore
-) -> Path:
-    async with semaphore:
-        return await retriever.download_document(document)
-
-
 async def run() -> None:
-    retriever = ExecutiveOrderRetriever(data_directory=DATA_DIR)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    database_url = f"sqlite+aiosqlite:///{(DATA_DIR / 'legda.db').as_posix()}"
+    engine, session_factory = create_session_factory(database_url)
+    await initialize_database(engine)
 
-    documents = await retriever.documents_since(SINCE)
-    if not documents:
-        print(f"No executive orders found since {SINCE.date().isoformat()}.")
-        return
+    plugins = build_plugins(data_directory=DATA_DIR)
+    discovery_driver = DiscoveryDriver(session_factory=session_factory, plugins=plugins)
+    download_driver = DownloadDriver(session_factory=session_factory, plugins=plugins)
 
-    ordered_documents = sorted(
-        documents, key=lambda doc: (doc.publication_date, doc.document_number)
-    )
+    discovery_counts = await discovery_driver.run(SINCE)
+    download_counts = await download_driver.run()
 
-    semaphore = asyncio.Semaphore(5)
-    downloaded_paths = await asyncio.gather(
-        *(_download_document(retriever, document, semaphore) for document in ordered_documents)
-    )
+    await engine.dispose()
 
-    print(
-        f"Downloaded {len(downloaded_paths)} executive orders published since "
-        f"{SINCE.date().isoformat()} to "
-        f"{(retriever.data_directory / retriever.document_type).resolve()}"
-    )
-    for path in downloaded_paths:
-        print(f"- {path}")
+    print(f"Discovery complete since {SINCE.date().isoformat()}:")
+    for plugin_key, count in discovery_counts.items():
+        print(f"- {plugin_key}: upserted {count} documents")
 
+    print("Download complete:")
+    for plugin_key, count in download_counts.items():
+        print(f"- {plugin_key}: fetched {count} documents")
 
-if __name__ == "__main__":
-    asyncio.run(run())

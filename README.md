@@ -4,12 +4,15 @@
 
 ## Architecture
 
-- `Document` (`legda/models.py`) is the hashable metadata model shared across retrievers.
+- `Document` and `DocumentInstance` (`legda/models.py`) are SQLAlchemy models for persistent state.
 - `RetrievalPlugin` (`legda/plugins/base.py`) defines the plugin contract:
-  - `documents_since(datetime) -> set[Document]`
-  - `get_document(Document) -> bytes`
-  - `download_document(Document) -> Path`
+  - `get_documents(datetime) -> list[Document]`
+  - `get_document(Document, DocumentInstance) -> bytes`
+  - `download_document(Document) -> list[DocumentInstance]`
 - `ExecutiveOrderRetriever` (`legda/plugins/executive_orders.py`) implements this contract using the Federal Register API.
+- `DiscoveryDriver` (`legda/drivers/discovery.py`) runs all plugins and upserts discovered documents.
+- `DownloadDriver` (`legda/drivers/download.py`) fetches documents with `status=to_fetch`.
+- Plugin registration lives in `legda/plugins/__init__.py` via a plugin-key to class map.
 
 ## Run
 
@@ -20,4 +23,4 @@ python3 -m legda
 
 This fetches and downloads all executive orders published on or after `2026-02-19` into:
 
-- `data/<document_type>/<document_date>-<document_number>.<extension>`
+- `data/<document_type>/<publication_date>-<document_id>.<extension>`

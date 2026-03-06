@@ -4,56 +4,66 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 from typing import ClassVar
-from urllib.parse import urlparse
 
 from legda.models import Document
+from legda.models import DocumentInstance
+from legda.models import DocumentType
 
 
 class RetrievalPlugin(ABC):
     """Contract for document retrieval providers."""
 
+    plugin_key: ClassVar[str] = "base"
     document_type: ClassVar[str] = "documents"
+    preferred_document_types: ClassVar[tuple[DocumentType, ...]] = (
+        DocumentType.PDF,
+        DocumentType.HTML,
+        DocumentType.XML,
+    )
 
     def __init__(self, data_directory: Path | str = "data") -> None:
         self.data_directory = Path(data_directory)
 
     @abstractmethod
-    async def documents_since(self, since: datetime) -> set[Document]:
-        """Return document references published on/after ``since``."""
+    async def get_documents(self, since: datetime) -> list[Document]:
+        """Return discovered documents published on/after ``since``."""
 
     @abstractmethod
-    async def get_document(self, document: Document) -> bytes:
-        """Download a document previously returned by ``documents_since``."""
+    async def get_document(self, document: Document, instance: DocumentInstance) -> bytes:
+        """Download a specific document instance."""
 
-    async def download_document(self, document: Document) -> Path:
-        """Download and persist a document in the plugin's data directory."""
-        payload = await self.get_document(document)
-        output_path = self._document_output_path(document)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_bytes(payload)
-        return output_path
+    async def download_document(self, document: Document) -> list[DocumentInstance]:
+        """Download selected instances and set each downloaded filename."""
+        downloaded: list[DocumentInstance] = []
+        for instance in self.instances_to_download(document):
+            payload = await self.get_document(document, instance)
+            output_path = self._document_output_path(document, instance)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(payload)
+            instance.filename = str(output_path)
+            downloaded.append(instance)
+        return downloaded
 
-    def _document_output_path(self, document: Document) -> Path:
-        extension = self._document_extension(document)
+    def instances_to_download(self, document: Document) -> list[DocumentInstance]:
+        """Select which instances should be downloaded for this plugin."""
+        available = [instance for instance in document.instances if not instance.filename]
+        if not available:
+            return []
+
+        for preferred in self.preferred_document_types:
+            for instance in available:
+                if instance.document_type == preferred:
+                    return [instance]
+
+        return [available[0]]
+
+    def _document_output_path(
+        self, document: Document, instance: DocumentInstance
+    ) -> Path:
+        extension = instance.document_type.value
         filename = (
-            f"{document.publication_date.isoformat()}-{document.document_number}.{extension}"
+            f"{document.publication_date.isoformat()}-"
+            f"{document.document_id}.{extension}"
         )
         return self.data_directory / self.document_type / filename
 
-    def _document_extension(self, document: Document) -> str:
-        pdf_extension = self._extension_from_url(document.pdf_url)
-        if pdf_extension:
-            return pdf_extension
-
-        html_extension = self._extension_from_url(document.html_url)
-        if html_extension:
-            return html_extension
-
-        return "html"
-
-    @staticmethod
-    def _extension_from_url(url: str | None) -> str | None:
-        if not url:
-            return None
-        suffix = Path(urlparse(url).path).suffix.lstrip(".").lower()
-        return suffix or None

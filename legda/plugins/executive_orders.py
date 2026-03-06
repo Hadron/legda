@@ -1,26 +1,33 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date
+from datetime import datetime
+from datetime import timezone
 from typing import Any
 
 import httpx
 
 from legda.models import Document
+from legda.models import DocumentInstance
+from legda.models import DocumentStatus
+from legda.models import DocumentType
 from legda.plugins.base import RetrievalPlugin
 
 
 class ExecutiveOrderRetriever(RetrievalPlugin):
     """Retrieve executive orders from the Federal Register API."""
 
+    plugin_key = "executive_orders"
     document_type = "executive_orders"
+    preferred_document_types = (DocumentType.PDF, DocumentType.HTML)
     api_base_url = "https://www.federalregister.gov/api/v1/documents.json"
     default_per_page = 100
     timeout_seconds = 30.0
 
-    async def documents_since(self, since: datetime) -> set[Document]:
+    async def get_documents(self, since: datetime) -> list[Document]:
         since_date = self._date_filter(since)
         page = 1
-        documents: set[Document] = set()
+        documents: dict[tuple[date, str], Document] = {}
 
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             while True:
@@ -36,22 +43,61 @@ class ExecutiveOrderRetriever(RetrievalPlugin):
                 )
 
                 for result in payload.get("results", []):
-                    documents.add(self._to_document(result))
+                    publication_date = datetime.strptime(
+                        result["publication_date"], "%Y-%m-%d"
+                    ).date()
+                    document_id = result["document_number"]
+                    key = (publication_date, document_id)
+                    document = documents.get(key)
+                    if document is None:
+                        document = Document(
+                            publication_date=publication_date,
+                            document_id=document_id,
+                            plugin=self.plugin_key,
+                            title=result["title"],
+                            status=DocumentStatus.TO_FETCH,
+                        )
+                        documents[key] = document
 
-                next_page_url = payload.get("next_page_url")
-                if not next_page_url:
+                    self._add_instances(document, result)
+
+                if not payload.get("next_page_url"):
                     break
 
                 page += 1
 
-        return documents
+        return list(documents.values())
 
-    async def get_document(self, document: Document) -> bytes:
-        download_url = document.pdf_url or document.html_url
+    async def get_document(self, document: Document, instance: DocumentInstance) -> bytes:
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-            response = await client.get(download_url)
+            response = await client.get(instance.url)
             response.raise_for_status()
             return response.content
+
+    def _add_instances(self, document: Document, result: dict[str, Any]) -> None:
+        existing = {(instance.document_type, instance.url) for instance in document.instances}
+
+        candidates = (
+            (DocumentType.PDF, result.get("pdf_url")),
+            (DocumentType.HTML, result.get("html_url")),
+            (DocumentType.XML, result.get("full_text_xml_url")),
+        )
+        for doc_type, url in candidates:
+            if not url:
+                continue
+            key = (doc_type, url)
+            if key in existing:
+                continue
+            document.instances.append(
+                DocumentInstance(
+                    publication_date=document.publication_date,
+                    document_id=document.document_id,
+                    document_type=doc_type,
+                    url=url,
+                    filename=None,
+                )
+            )
+            existing.add(key)
 
     def _date_filter(self, value: datetime) -> str:
         if value.tzinfo is None:
@@ -59,18 +105,6 @@ class ExecutiveOrderRetriever(RetrievalPlugin):
         else:
             normalized = value.astimezone(timezone.utc).replace(tzinfo=None)
         return normalized.date().isoformat()
-
-    def _to_document(self, result: dict[str, Any]) -> Document:
-        return Document(
-            document_number=result["document_number"],
-            title=result["title"],
-            publication_date=datetime.strptime(
-                result["publication_date"], "%Y-%m-%d"
-            ).date(),
-            html_url=result["html_url"],
-            pdf_url=result.get("pdf_url"),
-            abstract=result.get("abstract"),
-        )
 
     async def _fetch_json(
         self, client: httpx.AsyncClient, params: dict[str, Any]
