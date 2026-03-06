@@ -3,10 +3,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from legda.db import create_session_factory
-from legda.db import initialize_database
-from legda.drivers import DiscoveryDriver
-from legda.drivers import DownloadDriver
+from legda.db import (
+    create_session_factory,
+    initialize_database,
+)
+from legda.drivers import (
+    DiscoveryDriver,
+    DownloadDriver,
+)
 from legda.plugins import build_plugins
 
 
@@ -36,4 +40,3 @@ async def run() -> None:
     print("Download complete:")
     for plugin_key, count in download_counts.items():
         print(f"- {plugin_key}: fetched {count} documents")
-

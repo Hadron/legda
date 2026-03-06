@@ -1,16 +1,20 @@
 from __future__ import annotations
 
-from datetime import date
-from datetime import datetime
-from datetime import timezone
+from datetime import (
+    date,
+    datetime,
+    timezone,
+)
 from typing import Any
 
 import httpx
 
-from legda.models import Document
-from legda.models import DocumentInstance
-from legda.models import DocumentStatus
-from legda.models import DocumentType
+from legda.models import (
+    Document,
+    DocumentInstance,
+    DocumentStatus,
+    DocumentType,
+)
 from legda.plugins.base import RetrievalPlugin
 
 

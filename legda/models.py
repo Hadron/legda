@@ -3,15 +3,18 @@ from __future__ import annotations
 from datetime import date
 from enum import Enum
 
-from sqlalchemy import Enum as SqlEnum
-from sqlalchemy import ForeignKeyConstraint
-from sqlalchemy import String
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import (
+    Enum as SqlEnum,
+    ForeignKeyConstraint,
+    String,
+)
 from sqlalchemy.ext.asyncio import AsyncAttrs
-from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.orm import Mapped
-from sqlalchemy.orm import mapped_column
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+    relationship,
+)
 
 
 class Base(AsyncAttrs, DeclarativeBase):
@@ -60,13 +63,13 @@ class DocumentInstance(Base):
 
     __tablename__ = "document_instances"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    publication_date: Mapped[date] = mapped_column()
-    document_id: Mapped[str] = mapped_column(String(64))
+    publication_date: Mapped[date] = mapped_column(primary_key=True)
+    document_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     document_type: Mapped[DocumentType] = mapped_column(
-        SqlEnum(DocumentType, name="document_type")
+        SqlEnum(DocumentType, name="document_type"),
+        primary_key=True,
     )
-    url: Mapped[str] = mapped_column(String(4096))
+    url: Mapped[str] = mapped_column(String(4096), primary_key=True)
     filename: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     __table_args__ = (
@@ -74,13 +77,6 @@ class DocumentInstance(Base):
             ["publication_date", "document_id"],
             ["documents.publication_date", "documents.document_id"],
             ondelete="CASCADE",
-        ),
-        UniqueConstraint(
-            "publication_date",
-            "document_id",
-            "document_type",
-            "url",
-            name="uq_document_instance_identity",
         ),
     )
 

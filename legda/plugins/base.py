@@ -5,9 +5,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import ClassVar
 
-from legda.models import Document
-from legda.models import DocumentInstance
-from legda.models import DocumentType
+from legda.models import (
+    Document,
+    DocumentInstance,
+    DocumentType,
+)
 
 
 class RetrievalPlugin(ABC):
@@ -66,4 +68,3 @@ class RetrievalPlugin(ABC):
             f"{document.document_id}.{extension}"
         )
         return self.data_directory / self.document_type / filename
-
