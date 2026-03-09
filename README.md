@@ -13,6 +13,7 @@
 - `ExecutiveOrderRetriever` (`legda/plugins/executive_orders.py`) uses that base for executive orders.
 - `OpmFederalRegisterRetriever` (`legda/plugins/opm_federal_register.py`) uses that base for OPM actions.
 - `OpmMemoRetriever` (`legda/plugins/opm_memos.py`) scrapes published OPM CHCOC memos.
+- `CongressRetriever` (`legda/plugins/congress.py`) discovers passed legislation and downloads bill XML from Congress.gov.
 - `DiscoveryDriver` (`legda/drivers/discovery.py`) runs all plugins and upserts discovered documents.
 - `DownloadDriver` (`legda/drivers/download.py`) fetches documents with `status=to_fetch`.
 - `FetchDate` (`legda/models.py`) stores per-plugin successful discovery timestamps.
@@ -22,6 +23,9 @@
 
 ```bash
 python3 -m pip install -r requirements.txt
+cat > .env <<'EOF'
+CONGRESS_API_KEY=your_key_here
+EOF
 python3 -m legda
 ```
 

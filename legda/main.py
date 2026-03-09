@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from legda.db import (
     create_session_factory,
     initialize_database,
@@ -17,6 +19,7 @@ DATA_DIR = Path("data")
 
 
 async def run() -> None:
+    load_dotenv(dotenv_path=".env")
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     database_url = f"sqlite+aiosqlite:///{(DATA_DIR / 'legda.db').as_posix()}"
     engine, session_factory = create_session_factory(database_url)
