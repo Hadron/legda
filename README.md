@@ -12,6 +12,7 @@
 - `FederalRegisterRetriever` (`legda/plugins/federal_register.py`) provides shared Federal Register retrieval logic.
 - `ExecutiveOrderRetriever` (`legda/plugins/executive_orders.py`) uses that base for executive orders.
 - `OpmFederalRegisterRetriever` (`legda/plugins/opm_federal_register.py`) uses that base for OPM actions.
+- `OpmMemoRetriever` (`legda/plugins/opm_memos.py`) scrapes published OPM CHCOC memos.
 - `DiscoveryDriver` (`legda/drivers/discovery.py`) runs all plugins and upserts discovered documents.
 - `DownloadDriver` (`legda/drivers/download.py`) fetches documents with `status=to_fetch`.
 - `FetchDate` (`legda/models.py`) stores per-plugin successful discovery timestamps.
@@ -24,7 +25,7 @@ python3 -m pip install -r requirements.txt
 python3 -m legda
 ```
 
-This fetches and downloads executive orders into:
+This fetches and downloads retrieved documents into:
 
 - `data/<document_type>/<publication_date>-<document_id>.<extension>`
 
