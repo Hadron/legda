@@ -11,6 +11,7 @@
   - `download_document(Document) -> list[DocumentInstance]`
 - `FederalRegisterRetriever` (`legda/plugins/federal_register.py`) provides shared Federal Register retrieval logic.
 - `ExecutiveOrderRetriever` (`legda/plugins/executive_orders.py`) uses that base for executive orders.
+- `OmbMemoRetriever` (`legda/plugins/omb_memos.py`) scrapes OMB memoranda from the White House guidance index.
 - `OpmFederalRegisterRetriever` (`legda/plugins/opm_federal_register.py`) uses that base for OPM actions.
 - `OpmMemoRetriever` (`legda/plugins/opm_memos.py`) scrapes published OPM CHCOC memos.
 - `CongressRetriever` (`legda/plugins/congress.py`) discovers passed legislation and downloads bill XML from Congress.gov.
