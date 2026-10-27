@@ -10,6 +10,7 @@ from pathlib import Path
 from provision_extraction.reconciliation import ReconcileSettings
 from provision_extraction.text import prepare_lines
 from provision_extraction.worker import WorkerSettings
+from provision_graph.document import TextDocument
 from provision_graph.graph import ExtractionSettings, build_graph
 from local.llm import get_model, get_reconcile_model
 
@@ -138,10 +139,10 @@ def _print_trace_line(assignment_id: str, event: dict) -> None:
         )
 
 
-def _run_graph(lines, model, settings, verbose: bool,
+def _run_graph(document, model, settings, verbose: bool,
                max_concurrency: int, trace_factory, reconcile_model=None):
     graph = build_graph(
-        lines, model, settings,
+        model, settings,
         trace_sink_factory=trace_factory,
         reconcile_model=reconcile_model,
     )
@@ -152,7 +153,10 @@ def _run_graph(lines, model, settings, verbose: bool,
             flush=True,
         )
     final = asyncio.run(
-        graph.ainvoke({}, config={"max_concurrency": max_concurrency})
+        graph.ainvoke(
+            {"document": document},
+            config={"max_concurrency": max_concurrency},
+        )
     )
     return final
 
@@ -178,10 +182,10 @@ def main() -> None:
 
     verbose = not args.quiet
     text = _to_text(args)
-    lines = prepare_lines(text)
+    doc = TextDocument(prepare_lines(text))
     if verbose:
         print(
-            f"Prepared {len(lines)} lines "
+            f"Prepared {len(doc.lines)} lines "
             f"({len(text)} chars) from source.",
             flush=True,
         )
@@ -207,7 +211,7 @@ def main() -> None:
     outdir.mkdir(parents=True, exist_ok=True)
     trace_factory = _trace_factory(outdir, verbose)
     final = _run_graph(
-        lines, model, settings, verbose, args.max_concurrency,
+        doc, model, settings, verbose, args.max_concurrency,
         trace_factory, reconcile_model=reconcile_model,
     )
 

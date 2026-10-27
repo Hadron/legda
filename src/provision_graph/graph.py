@@ -1,11 +1,13 @@
 """Build the extraction graph.
 
 Nodes:
-- assign: create contiguous, nonoverlapping assignments from the lines.
+- assign: create contiguous, nonoverlapping assignments from the document.
 - worker: run one assignment's bounded extraction loop (fan out via Send).
 - reconcile: resolve potential duplicate candidates into final provisions.
 
-The prepared lines, the model, and settings are captured by the builder.
+The model and settings are captured by the builder. The document is NOT a
+build argument; it is supplied at invocation time as the ``document`` entry
+of the initial state, so the graph can be built before the document is known.
 """
 
 from __future__ import annotations
@@ -16,13 +18,12 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
-from provision_extraction.assignments import make_assignments
 from provision_extraction.reconciliation import (
     ReconcileSettings,
     reconcile_provisions,
 )
-from provision_extraction.text import prepare_lines
 from provision_extraction.worker import WorkerSettings, run_assignment
+from provision_graph.document import TextDocument
 from provision_graph.models import Provision
 from provision_graph.state import GraphState
 
@@ -35,13 +36,15 @@ class ExtractionSettings:
 
 
 def build_graph(
-    lines: list[str],
     model,
     settings: ExtractionSettings | None = None,
     trace_sink_factory=None,
     reconcile_model=None,
 ):
     """Build the extraction graph.
+
+    The document is supplied at invocation time as the ``document`` entry of
+    the initial state (see GraphState).
 
     ``trace_sink_factory`` (optional) maps an assignment id to a callable
     that receives step-trace event dicts for that assignment (see
@@ -56,23 +59,30 @@ def build_graph(
     reconcile_model = reconcile_model or model
 
     def assign_node(state: GraphState) -> dict:
-        assignments = make_assignments(
-            lines, settings.assignment_target_chars
+        document: TextDocument = state["document"]
+        assignments = document.generate_assignments(
+            settings.assignment_target_chars
         )
         return {"assignments": assignments}
 
     def route_assignments(state: GraphState):
         assignments = state.get("assignments") or []
+        document = state["document"]
         if not assignments:
             return "reconcile"
-        return [Send("worker", a) for a in assignments]
+        return [
+            Send("worker", {"assignment": a, "document": document})
+            for a in assignments
+        ]
 
-    def worker_node(assignment) -> dict:
+    def worker_node(payload: dict) -> dict:
+        assignment = payload["assignment"]
+        document = payload["document"]
         sink = None
         if trace_sink_factory is not None:
             sink = trace_sink_factory(assignment.id)
         result = run_assignment(
-            assignment, lines, model, settings.worker, trace=sink
+            assignment, document, model, settings.worker, trace=sink
         )
         return {"assignment_results": {assignment.id: result}}
 
@@ -91,8 +101,11 @@ def build_graph(
         if trace_sink_factory is not None:
             sink = trace_sink_factory("reconcile")
         final = reconcile_provisions(
-            candidates, reconcile_model, settings.reconcile,
-            trace=sink, lines=lines,
+            candidates,
+            reconcile_model,
+            settings.reconcile,
+            trace=sink,
+            lines=state["document"].lines,
         )
         return {"failed_assignments": failed, "reconciled_provisions": final}
 

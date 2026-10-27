@@ -3,6 +3,7 @@ import asyncio
 import pytest
 from langchain_core.messages import AIMessage
 
+from provision_graph.document import TextDocument
 from provision_graph.graph import ExtractionSettings, build_graph
 from provision_graph.models import LineRange, Provision
 
@@ -46,8 +47,8 @@ def test_graph_end_to_end_no_overlap():
     # tiny document where there is exactly one assignment.
     settings = ExtractionSettings(assignment_target_chars=10**9)
     model = FakeModel({"provisions": [_prov("Sec. 1", 1, 5)]})
-    graph = build_graph(lines, model, settings)
-    final = asyncio.run(graph.ainvoke({}))
+    graph = build_graph(model, settings)
+    final = asyncio.run(graph.ainvoke({"document": TextDocument(lines)}))
     assert "assignments" in final
     assert len(final["assignments"]) == 1
     results = final["assignment_results"]
@@ -63,16 +64,16 @@ def test_graph_multiple_assignments_fanout():
     # Small target so we get multiple assignments.
     settings = ExtractionSettings(assignment_target_chars=60)
     model = FakeModel({"provisions": []})  # no provisions -> no overlap
-    graph = build_graph(lines, model, settings)
-    final = asyncio.run(graph.ainvoke({}))
+    graph = build_graph(model, settings)
+    final = asyncio.run(graph.ainvoke({"document": TextDocument(lines)}))
     assert len(final["assignments"]) > 1
     assert len(final["assignment_results"]) == len(final["assignments"])
     assert final["reconciled_provisions"] == []
 
 
 def test_graph_empty_document():
-    graph = build_graph([], FakeModel({"provisions": []}), ExtractionSettings())
-    final = asyncio.run(graph.ainvoke({}))
+    graph = build_graph(FakeModel({"provisions": []}), ExtractionSettings())
+    final = asyncio.run(graph.ainvoke({"document": TextDocument([])}))
     assert final.get("assignments") == []
     assert final.get("reconciled_provisions") == []
 
@@ -109,7 +110,7 @@ def test_worker_retries_transient_model_errors():
     model = FlakyModel({"provisions": [_prov("Sec. 1", 1, 5)]}, fail_times=2)
     result = run_assignment(
         assignment,
-        lines,
+        TextDocument(lines),
         model,
         WorkerSettings(retry_backoff=0.0, max_model_retries=4),
     )
@@ -127,7 +128,7 @@ def test_worker_gives_up_after_max_retries():
     model = FlakyModel({"provisions": []}, fail_times=999)
     result = run_assignment(
         assignment,
-        lines,
+        TextDocument(lines),
         model,
         WorkerSettings(retry_backoff=0.0, max_model_retries=3),
     )
@@ -144,8 +145,8 @@ def test_graph_survives_failed_assignments():
         worker=WorkerSettings(retry_backoff=0.0, max_model_retries=1),
     )
     model = FlakyModel({"provisions": []}, fail_times=999)
-    graph = build_graph(lines, model, settings)
-    final = asyncio.run(graph.ainvoke({}))
+    graph = build_graph(model, settings)
+    final = asyncio.run(graph.ainvoke({"document": TextDocument(lines)}))
     assert len(final["assignment_results"]) == len(final["assignments"])
     assert final["reconciled_provisions"] == []
     failed = final["failed_assignments"]

@@ -39,6 +39,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 
+from provision_graph.document import TextDocument
 from provision_graph.models import Assignment, AssignmentResult, Provision
 from provision_extraction.text import render_range
 from provision_extraction.tools import (
@@ -158,7 +159,7 @@ SYSTEM_PROMPT += (
 
 
 def _user_prompt(
-    assignment: Assignment, total: int, note: str, lines: list[str]
+    assignment: Assignment, total: int, note: str, document: TextDocument
 ) -> str:
     parts = [
         f"The document has {total} numbered lines.",
@@ -167,12 +168,17 @@ def _user_prompt(
     ]
     if note:
         parts.append(note)
+    extra = document.augment_task_prompt(assignment)
+    if extra:
+        parts.append(extra)
     parts.append(
         "Your assigned range is included below. Remember: you own every "
         "provision that STARTS in this range, including ones that continue "
         "past its end."
     )
-    parts.append(render_range(lines, assignment.start_line, assignment.end_line)[0])
+    parts.append(
+        render_range(document.lines, assignment.start_line, assignment.end_line)[0]
+    )
     return "\n".join(parts)
 
 
@@ -304,22 +310,22 @@ def _emit(trace, assignment: Assignment, event: str, **fields: Any) -> None:
 
 def run_assignment(
     assignment: Assignment,
-    lines: list[str],
+    document: TextDocument,
     model,
     settings: WorkerSettings | None = None,
     trace: Callable[[dict], None] | None = None,
 ) -> AssignmentResult:
     """Run the bounded extraction loop for one assignment."""
     settings = settings or WorkerSettings()
-    total = len(lines)
-    tools = build_tools(lines)
+    total = len(document.lines)
+    tools = build_tools(document)
     invoker = _ToolInvoker(model, tools, settings.force_tool_choice)
 
     messages: list[BaseMessage] = [
         SystemMessage(content=SYSTEM_PROMPT),
         HumanMessage(
             content=_user_prompt(
-                assignment, total, settings.system_note, lines
+                assignment, total, settings.system_note, document
             )
         ),
     ]
@@ -513,7 +519,7 @@ def run_assignment(
             call_id = call.get("id") or ""
             args = call.get("args", {}) or {}
             try:
-                result = execute_tool(name, args, lines)
+                result = execute_tool(document, name, args)
             except Exception as exc:
                 result = f"Tool error: {exc}"
             messages.append(

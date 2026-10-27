@@ -1,24 +1,28 @@
 """Retrieval and submission tools exposed to the extraction worker.
 
-Three tools are presented to the model:
+Base tools presented to the model:
 
 - ``retrieve``: read an inclusive 1-based line range as numbered text.
 - ``search``: find lines containing a query (grep-like, with context).
 - ``submit_provisions``: terminal action that returns the extracted
   provisions. The worker intercepts this call instead of executing it.
 
-``build_tools`` returns LangChain tools bound to a specific prepared-lines
-list so they can be passed to ``model.bind_tools``. ``execute_tool`` runs the
-non-terminal tools manually so the worker controls the loop.
+A document may also contribute extra tools (``document.optional_tools()``),
+which are bound alongside the base tools and executed generically.
+
+``build_tools`` returns LangChain tools bound to a document so they can be
+passed to ``model.bind_tools``. ``execute_tool`` runs the non-terminal tools
+manually so the worker controls the loop.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from langchain_core.tools import BaseTool, tool
 
 from provision_extraction.text import render_range
+from provision_graph.document import TextDocument
 from provision_graph.models import Provision
 
 SUBMIT_TOOL_NAME = "submit_provisions"
@@ -32,8 +36,14 @@ def search_lines(
     before: int = 3,
     after: int = 3,
     limit: int = 25,
+    augment: Callable[[int], str] | None = None,
 ) -> str:
-    """Case-insensitive substring search with numbered context around hits."""
+    """Case-insensitive substring search with numbered context around hits.
+
+    If ``augment`` is given, its return value for each hit line is appended
+    under the match header as document-kind context (e.g. the enclosing
+    section). A ``None`` or empty result adds nothing.
+    """
     needle = query.strip().lower()
     if not needle:
         return "Empty query."
@@ -49,14 +59,24 @@ def search_lines(
         start = max(1, h - before)
         end = min(len(lines), h + after)
         text, _, _ = render_range(lines, start, end)
-        parts.append(f"--- match at line {h} ---\n{text}")
+        header = f"--- match at line {h} ---"
+        if augment is not None:
+            extra = augment(h)
+            if extra:
+                header = f"{header}\n{extra}"
+        parts.append(f"{header}\n{text}")
     if total > len(shown):
         parts.append(f"... and {total - len(shown)} more match(es).")
     return "\n\n".join(parts)
 
 
-def build_tools(lines: list[str]) -> list[BaseTool]:
-    """Build the worker's tools bound to ``lines``."""
+def build_tools(document: TextDocument) -> list[BaseTool]:
+    """Build the worker's tools bound to ``document``.
+
+    The base tools (retrieve, search, submit) are always present; any tools
+    contributed by the document are appended.
+    """
+    lines = document.lines
 
     @tool
     def retrieve(start: int, end: int) -> str:
@@ -73,7 +93,14 @@ def build_tools(lines: list[str]) -> list[BaseTool]:
         """Find lines containing the query (case-insensitive). Returns numbered
         context lines around each match. Use this to locate a term, then
         retrieve a range to read it in full."""
-        return search_lines(lines, query, before=before, after=after, limit=limit)
+        return search_lines(
+            lines,
+            query,
+            before=before,
+            after=after,
+            limit=limit,
+            augment=document.augment_search_hit,
+        )
 
     @tool
     def submit_provisions(provisions: list[Provision]) -> str:
@@ -83,11 +110,16 @@ def build_tools(lines: list[str]) -> list[BaseTool]:
         in the assigned range."""
         return "submitted"
 
-    return [retrieve, search, submit_provisions]
+    tools: list[BaseTool] = [retrieve, search, submit_provisions]
+    tools.extend(document.optional_tools())
+    return tools
 
 
-def execute_tool(name: str, args: dict[str, Any], lines: list[str]) -> str:
+def execute_tool(
+    document: TextDocument, name: str, args: dict[str, Any]
+) -> str:
     """Execute a non-terminal tool by name. Raises ValueError for submit."""
+    lines = document.lines
     if name == RETRIEVE_TOOL_NAME:
         start = int(args.get("start", 1))
         end = int(args.get("end", start))
@@ -102,5 +134,12 @@ def execute_tool(name: str, args: dict[str, Any], lines: list[str]) -> str:
             before=int(args.get("before", 3)),
             after=int(args.get("after", 3)),
             limit=int(args.get("limit", 25)),
+            augment=document.augment_search_hit,
         )
+    # Optional tools contributed by the document (e.g. XML navigation).
+    for t in document.optional_tools():
+        if getattr(t, "name", None) == name:
+            if hasattr(t, "func"):
+                return t.func(**args)
+            return t.invoke(args)
     raise ValueError(f"Tool {name!r} is not manually executable here.")

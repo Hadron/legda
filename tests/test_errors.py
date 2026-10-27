@@ -9,6 +9,7 @@ from provision_extraction.worker import (
     _parse_error_feedback,
     run_assignment,
 )
+from provision_graph.document import TextDocument
 from provision_graph.models import Assignment
 
 
@@ -90,7 +91,7 @@ def test_parse_error_retries_without_backoff_and_completes():
     # A large backoff would stall the test if the parse path slept.
     result = run_assignment(
         _assignment(),
-        lines,
+        TextDocument(lines),
         model,
         WorkerSettings(retry_backoff=999.0),
     )
@@ -103,7 +104,7 @@ def test_repeated_parse_errors_fail_assignment():
     model = FlakyParseModel({"provisions": []}, parse_fail_times=999)
     result = run_assignment(
         _assignment(),
-        lines,
+        TextDocument(lines),
         model,
         WorkerSettings(retry_backoff=999.0, max_consecutive_parse_errors=2),
     )
@@ -117,7 +118,7 @@ def test_trace_events_recorded():
     events: list[dict] = []
     result = run_assignment(
         _assignment(),
-        lines,
+        TextDocument(lines),
         model,
         WorkerSettings(retry_backoff=0.0),
         trace=events.append,
