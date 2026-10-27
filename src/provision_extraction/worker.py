@@ -138,6 +138,16 @@ SYSTEM_PROMPT += (
     "Added, removed, and repealed sections count as amended.\n"
 )
 SYSTEM_PROMPT += (
+    "\nReference context: When a provision amends or cites 'a section' "
+    "without naming which act or code, determine which act or code is meant. "
+    "If the provision does not state it explicitly, that context is often "
+    "supplied by introductory material \u2014 for example a 'Definitions' section, "
+    "or a section titled like 'References to the Internal Revenue Code' near "
+    "the beginning of the document or of the title that contains the "
+    "provision. Read that introductory material (using retrieve) to "
+    "establish the reference context before classifying the citation.\n"
+)
+SYSTEM_PROMPT += (
     "\nFill every field. Citation discipline:\n"
     "- section_citation is the INCOMING DOCUMENT's own section for this "
     "provision (e.g. 'Sec. 504' or 'SECTION 2'), never a section of an "
