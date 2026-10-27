@@ -1,7 +1,9 @@
 """The per-assignment extraction worker.
 
 run_assignment drives one assignment through a bounded model/tool loop:
-retrieve/search calls are executed and returned to the model; a
+the worker's assigned range is inlined in its task message, so the first
+step is to read it from there; retrieve/search remain available for the
+rest of the document and are executed and returned to the model; a
 submit_provisions call is intercepted, validated, and ends the loop; a plain
 assistant message with no tool call gets a nudge to keep using tools or to
 submit; if the step budget is exhausted the assignment fails.
@@ -38,6 +40,7 @@ from langchain_core.messages import (
 )
 
 from provision_graph.models import Assignment, AssignmentResult, Provision
+from provision_extraction.text import render_range
 from provision_extraction.tools import (
     RETRIEVE_TOOL_NAME,
     SEARCH_TOOL_NAME,
@@ -68,6 +71,26 @@ SYSTEM_PROMPT = (
     "the full document is larger, and you may retrieve or search any part "
     "of it.\n"
     "\n"
+    "IRS scope: Your findings are used by the Internal Revenue Service. "
+    "The IRS administers the U.S. federal tax system and, as an ancillary "
+    "function, issues Taxpayer Identification Numbers (TINs). Social "
+    "Security Numbers are NOT an IRS function (the Social Security "
+    "Administration issues them); treat provisions that only concern SSNs "
+    "as out of scope unless the provision also assigns operative work to "
+    "the IRS or amends the Code.\n"
+    "\n"
+    "Extract ONLY provisions that are relevant to the IRS. A provision is "
+    "IRS-relevant when it (a) amends, adds to, or repeals the Internal "
+    "Revenue Code (26 U.S.C.); (b) concerns a federal tax, penalty, "
+    "refund, or other administration of the federal tax system; or "
+    "(c) assigns operative work to the IRS or Treasury. Look a bit deeper "
+    "than the heading: a provision that names other agencies may still be "
+    "IRS-administered (the other agencies often only provide inputs, while "
+    "the IRS does the administering), and some parts of the IRC are "
+    "administered by other agencies \u2014 so confirm rather than assume. Do "
+    "not submit a provision with no IRS-relevant operative content; if "
+    "none in your range qualifies, submit an empty list.\n"
+    "\n"
     "A provision is an operative unit of the INCOMING DOCUMENT: typically one "
     "numbered section of that document (e.g. 'Sec. 101', 'SECTION 2', "
     "'\u00a7 301.5') that has independent legal effect \u2014 amending, "
@@ -93,16 +116,16 @@ SYSTEM_PROMPT = (
 )
 SYSTEM_PROMPT += (
     "\nMethod:\n"
-    "1. Read your assigned range with retrieve.\n"
-    "2. Identify the provisions that start in your range (completing any "
-    "that run past the range end).\n"
-    "3. For each provision, record the sections of other instruments it "
+    "1. Your assigned range is provided in your task message. Identify the "
+    "provisions that START in it; if one continues past the range end, "
+    "retrieve past the end to complete it.\n"
+    "2. For each provision, record the sections of other instruments it "
     "amends or cites, a summary of its legal effect, and its effective-date "
     "rule (say where the date comes from).\n"
-    "4. Use retrieve/search on other parts of the document as needed for "
+    "3. Use retrieve/search on other parts of the document as needed for "
     "context (definitions, related effective-date rules), but "
     "operative_locations should point to the lines expressing the rule.\n"
-    "5. When done, call submit_provisions. If no provision that starts in "
+    "4. When done, call submit_provisions. If no provision that starts in "
     "your range has IRS-relevant operative content, submit an empty list.\n"
 )
 SYSTEM_PROMPT += (
@@ -134,7 +157,9 @@ SYSTEM_PROMPT += (
 )
 
 
-def _user_prompt(assignment: Assignment, total: int, note: str) -> str:
+def _user_prompt(
+    assignment: Assignment, total: int, note: str, lines: list[str]
+) -> str:
     parts = [
         f"The document has {total} numbered lines.",
         f"Your assignment is lines {assignment.start_line} through "
@@ -143,10 +168,11 @@ def _user_prompt(assignment: Assignment, total: int, note: str) -> str:
     if note:
         parts.append(note)
     parts.append(
-        "Begin by retrieving your assigned range. Remember: you own every "
-        "provision that STARTS in your range, including ones that continue "
+        "Your assigned range is included below. Remember: you own every "
+        "provision that STARTS in this range, including ones that continue "
         "past its end."
     )
+    parts.append(render_range(lines, assignment.start_line, assignment.end_line)[0])
     return "\n".join(parts)
 
 
@@ -292,7 +318,9 @@ def run_assignment(
     messages: list[BaseMessage] = [
         SystemMessage(content=SYSTEM_PROMPT),
         HumanMessage(
-            content=_user_prompt(assignment, total, settings.system_note)
+            content=_user_prompt(
+                assignment, total, settings.system_note, lines
+            )
         ),
     ]
     _emit(
