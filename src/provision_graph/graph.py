@@ -49,8 +49,8 @@ def build_graph(
     tracing for an assignment.
 
     ``reconcile_model`` (optional) is a separate model client used for the
-    reconciliation step; defaults to ``model``. Local runs pass a client
-    with thinking disabled for the mechanical merge work.
+    reconciliation step; defaults to ``model``. Local runs pass a dedicated
+    client for the merge work (see local.llm.get_reconcile_model).
     """
     settings = settings or ExtractionSettings()
     reconcile_model = reconcile_model or model
