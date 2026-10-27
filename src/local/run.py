@@ -22,6 +22,30 @@ def _to_text(args) -> str:
     return pdf_to_text(args.pdf, ocr=args.ocr)
 
 
+def _build_document(args, verbose: bool):
+    """Build the run's document from --xml, --text, or the PDF positional."""
+    if args.xml:
+        from provision_graph.xml_document import XmlDocument
+
+        doc = XmlDocument.from_uslm(Path(args.xml))
+        n_sections = sum(1 for s in doc.sections if not s.is_toc)
+        if verbose:
+            print(
+                f"Prepared {len(doc.lines)} lines from XML "
+                f"({n_sections} sections, TOC excluded from assignments).",
+                flush=True,
+            )
+        return doc
+    text = _to_text(args)
+    doc = TextDocument(prepare_lines(text))
+    if verbose:
+        print(
+            f"Prepared {len(doc.lines)} lines ({len(text)} chars) from source.",
+            flush=True,
+        )
+    return doc
+
+
 def _cite_lines(items) -> str:
     if not items:
         return "  (none)\n"
@@ -165,6 +189,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Extract IRS provisions")
     ap.add_argument("pdf", nargs="?", default="BILLS-119hr5349eas.pdf")
     ap.add_argument("--text", help="Use a text file instead of PDF")
+    ap.add_argument("--xml", help="Use a USLM XML file (GPO) instead of PDF")
     ap.add_argument("--ocr", action="store_true", help="Run OCR in Docling")
     ap.add_argument("--target-chars", type=int, default=15000)
     ap.add_argument("--out", default="out")
@@ -181,14 +206,7 @@ def main() -> None:
     args = ap.parse_args()
 
     verbose = not args.quiet
-    text = _to_text(args)
-    doc = TextDocument(prepare_lines(text))
-    if verbose:
-        print(
-            f"Prepared {len(doc.lines)} lines "
-            f"({len(text)} chars) from source.",
-            flush=True,
-        )
+    doc = _build_document(args, verbose)
 
     model = get_model(
         model_name=args.model,
